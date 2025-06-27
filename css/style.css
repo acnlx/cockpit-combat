@@ -890,3 +890,36 @@ body::before {
     background: #047857;
     transform: translateY(-2px);
 }
+
+/* Indicateur de statut réseau */
+.network-status {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.network-status.saving {
+    background: rgba(59, 130, 246, 0.9);
+    color: white;
+}
+
+.network-status.syncing {
+    background: rgba(245, 158, 11, 0.9);
+    color: white;
+}
+
+.network-status.synced {
+    background: rgba(16, 185, 129, 0.9);
+    color: white;
+}
+
+.network-status.offline {
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+}
