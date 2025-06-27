@@ -59,6 +59,8 @@ class CockpitCombat {
                         this.showStats();
                     } else if (checkType === 'home') {
                         this.showHomePage();
+                    } else if (checkType === 'semaine') {
+                        this.showWeeklyPlanning();
                     } else {
                         this.loadCheck(checkType);
                     }
@@ -205,6 +207,340 @@ class CockpitCombat {
 
         await this.generateDailyObjectives();
         await this.loadDailyStats();
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Affichage de la planification hebdomadaire
+    async showWeeklyPlanning() {
+        this.currentCheck = 'semaine';
+        this.updateActiveNav();
+        
+        const container = document.getElementById('checkContainer');
+        container.innerHTML = `
+            <div class="weekly-container">
+                <div class="week-header">
+                    <h2><i class="fas fa-calendar-week"></i> PLANIFICATION SEMAINE</h2>
+                    <div class="week-navigation">
+                        <button class="week-nav-btn" onclick="app.changeWeek(-1)">
+                            <i class="fas fa-chevron-left"></i> Semaine précédente
+                        </button>
+                        <span class="current-week" id="currentWeekDisplay">Semaine du ${this.getCurrentWeekRange()}</span>
+                        <button class="week-nav-btn" onclick="app.changeWeek(1)">
+                            Semaine suivante <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="weekly-objectives" id="weeklyObjectives">
+                    <h3><i class="fas fa-target"></i> OBJECTIFS DE LA SEMAINE</h3>
+                    <div class="loading-objectives">
+                        <div class="loading"></div>
+                        <p>Génération des objectifs hebdomadaires...</p>
+                    </div>
+                </div>
+
+                <div class="weekly-kcal">
+                    <h3><i class="fas fa-fire"></i> OBJECTIF KCAL SEMAINE</h3>
+                    <div class="kcal-tracker">
+                        <div class="kcal-goal">
+                            <div class="kcal-value" id="weeklyKcalGoal">12,000</div>
+                            <div class="kcal-label">Objectif kcal</div>
+                        </div>
+                        <div class="kcal-progress">
+                            <div class="kcal-consumed">
+                                <div class="kcal-value" id="weeklyKcalConsumed">8,400</div>
+                                <div class="kcal-label">Consommées</div>
+                            </div>
+                            <div class="kcal-remaining">
+                                <div class="kcal-value" id="weeklyKcalRemaining">3,600</div>
+                                <div class="kcal-label">Restantes</div>
+                            </div>
+                        </div>
+                        <div class="kcal-bar">
+                            <div class="kcal-fill" id="weeklyKcalFill"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="weekly-sports">
+                    <h3><i class="fas fa-dumbbell"></i> PLANNING SPORTIF</h3>
+                    <div class="sports-grid" id="sportsGrid">
+                        <!-- Généré dynamiquement -->
+                    </div>
+                </div>
+
+                <div class="weekly-goals">
+                    <h3><i class="fas fa-trophy"></i> OBJECTIFS SPÉCIFIQUES</h3>
+                    <div class="goals-list" id="weeklyGoalsList">
+                        <!-- Généré dynamiquement -->
+                    </div>
+                </div>
+
+                <div class="week-actions">
+                    <button class="submit-btn" onclick="app.generateWeeklyPlan()">
+                        <i class="fas fa-magic"></i> Régénérer le planning
+                    </button>
+                    <button class="submit-btn" onclick="app.saveWeeklyPlan()">
+                        <i class="fas fa-save"></i> Sauvegarder
+                    </button>
+                </div>
+            </div>
+        `;
+
+        await this.loadWeeklyData();
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Charger les données hebdomadaires
+    async loadWeeklyData() {
+        try {
+            await Promise.all([
+                this.generateWeeklyObjectives(),
+                this.loadWeeklyKcal(),
+                this.generateSportsPlanning(),
+                this.generateWeeklyGoals()
+            ]);
+        } catch (error) {
+            console.error('Erreur chargement données hebdomadaires:', error);
+        }
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Générer les objectifs hebdomadaires
+    async generateWeeklyObjectives() {
+        try {
+            const weekNumber = this.getCurrentWeekNumber();
+            const prompt = `Tu es un coach militaire français pour Arnaud, 18 ans, en mission de transformation de 90 jours.
+
+Génère exactement 3 objectifs SMART pour la semaine ${weekNumber}. 
+
+Format OBLIGATOIRE - Réponds UNIQUEMENT avec cette structure JSON :
+{
+  "objectives": [
+    "Objectif 1 hebdomadaire précis",
+    "Objectif 2 hebdomadaire précis", 
+    "Objectif 3 hebdomadaire précis"
+  ]
+}
+
+Règles:
+- Objectifs sur 7 jours
+- Vocabulaire militaire motivant
+- Tutoiement
+- Objectifs mesurables et réalisables
+- Maximum 20 mots par objectif
+
+Contexte: Semaine ${weekNumber}/13 de sa mission de 90 jours.`;
+
+            const response = await this.chatGPT.getFeedback(prompt);
+            
+            let objectivesData;
+            try {
+                objectivesData = JSON.parse(response);
+            } catch (e) {
+                objectivesData = {
+                    objectives: [
+                        "Compléter 100% des checks quotidiens cette semaine",
+                        "Perdre 0.5kg tout en maintenant la masse musculaire",
+                        "Améliorer la qualité de sommeil moyenne à 8/10"
+                    ]
+                };
+            }
+
+            const savedObjectives = JSON.parse(localStorage.getItem('weekly-objectives') || '{}');
+            const weekKey = this.getCurrentWeekKey();
+            
+            if (!savedObjectives[weekKey]) {
+                savedObjectives[weekKey] = objectivesData.objectives.map(obj => ({
+                    text: obj,
+                    completed: false
+                }));
+                localStorage.setItem('weekly-objectives', JSON.stringify(savedObjectives));
+            }
+
+            this.renderWeeklyObjectivesList(savedObjectives[weekKey]);
+            
+        } catch (error) {
+            console.error('Erreur génération objectifs hebdomadaires:', error);
+            this.renderDefaultWeeklyObjectives();
+        }
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Afficher les objectifs hebdomadaires
+    renderWeeklyObjectivesList(objectives) {
+        document.getElementById('weeklyObjectives').innerHTML = `
+            <h3><i class="fas fa-target"></i> OBJECTIFS DE LA SEMAINE</h3>
+            <div class="objectives-list">
+                ${objectives.map((obj, index) => `
+                    <div class="objective-item ${obj.completed ? 'completed' : ''}">
+                        <input type="checkbox" 
+                               id="weekly-obj-${index}" 
+                               ${obj.completed ? 'checked' : ''}
+                               onchange="app.toggleWeeklyObjective(${index})">
+                        <label for="weekly-obj-${index}">${obj.text}</label>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    renderDefaultWeeklyObjectives() {
+        const defaultObjectives = [
+            { text: "Compléter 100% des checks quotidiens cette semaine", completed: false },
+            { text: "Perdre 0.5kg tout en maintenant la masse musculaire", completed: false },
+            { text: "Améliorer la qualité de sommeil moyenne à 8/10", completed: false }
+        ];
+        
+        const weekKey = this.getCurrentWeekKey();
+        const savedObjectives = JSON.parse(localStorage.getItem('weekly-objectives') || '{}');
+        savedObjectives[weekKey] = defaultObjectives;
+        localStorage.setItem('weekly-objectives', JSON.stringify(savedObjectives));
+        
+        this.renderWeeklyObjectivesList(defaultObjectives);
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Toggle objectif hebdomadaire
+    toggleWeeklyObjective(index) {
+        const weekKey = this.getCurrentWeekKey();
+        const savedObjectives = JSON.parse(localStorage.getItem('weekly-objectives') || '{}');
+        
+        if (savedObjectives[weekKey] && savedObjectives[weekKey][index]) {
+            savedObjectives[weekKey][index].completed = !savedObjectives[weekKey][index].completed;
+            localStorage.setItem('weekly-objectives', JSON.stringify(savedObjectives));
+            
+            if (savedObjectives[weekKey][index].completed) {
+                this.showAIFeedback("🎯 Objectif hebdomadaire accompli soldat ! Tu progresses bien ! ⚔️");
+            }
+            
+            this.renderWeeklyObjectivesList(savedObjectives[weekKey]);
+        }
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Charger les données kcal hebdomadaires
+    async loadWeeklyKcal() {
+        // Données simulées - à remplacer par de vraies données
+        const weeklyGoal = 12000;
+        const consumed = 8400;
+        const remaining = weeklyGoal - consumed;
+        const percentage = (consumed / weeklyGoal) * 100;
+
+        document.getElementById('weeklyKcalGoal').textContent = weeklyGoal.toLocaleString();
+        document.getElementById('weeklyKcalConsumed').textContent = consumed.toLocaleString();
+        document.getElementById('weeklyKcalRemaining').textContent = remaining.toLocaleString();
+        document.getElementById('weeklyKcalFill').style.width = `${percentage}%`;
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Générer le planning sportif
+    async generateSportsPlanning() {
+        const sportsPlanning = [
+            { day: 'Lundi', type: 'Cardio', duration: '45min', intensity: 'Modérée', completed: true },
+            { day: 'Mardi', type: 'Musculation', duration: '60min', intensity: 'Intense', completed: true },
+            { day: 'Mercredi', type: 'Repos actif', duration: '30min', intensity: 'Légère', completed: false },
+            { day: 'Jeudi', type: 'Cardio HIIT', duration: '30min', intensity: 'Très intense', completed: false },
+            { day: 'Vendredi', type: 'Musculation', duration: '60min', intensity: 'Intense', completed: false },
+            { day: 'Samedi', type: 'Sport libre', duration: '45min', intensity: 'Modérée', completed: false },
+            { day: 'Dimanche', type: 'Repos', duration: '-', intensity: 'Repos', completed: false }
+        ];
+
+        const sportsGrid = document.getElementById('sportsGrid');
+        sportsGrid.innerHTML = sportsPlanning.map(sport => `
+            <div class="sport-card ${sport.completed ? 'completed' : ''}">
+                <div class="sport-day">${sport.day}</div>
+                <div class="sport-type">${sport.type}</div>
+                <div class="sport-details">
+                    <span class="sport-duration">${sport.duration}</span>
+                    <span class="sport-intensity intensity-${sport.intensity.toLowerCase().replace(' ', '-')}">${sport.intensity}</span>
+                </div>
+                <button class="sport-toggle" onclick="app.toggleSportDay('${sport.day}')">
+                    <i class="fas fa-${sport.completed ? 'check' : 'circle'}"></i>
+                </button>
+            </div>
+        `).join('');
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Générer les objectifs spécifiques
+    async generateWeeklyGoals() {
+        const goals = [
+            { category: 'Poids', target: 'Perdre 0.5kg', current: '74.2kg', goal: '73.7kg', progress: 60 },
+            { category: 'Sommeil', target: 'Moyenne 8h/nuit', current: '7.2h', goal: '8h', progress: 90 },
+            { category: 'Cardio', target: '3 séances', current: '2/3', goal: '3', progress: 67 },
+            { category: 'Discipline', target: '100% checks', current: '85%', goal: '100%', progress: 85 }
+        ];
+
+        const goalsList = document.getElementById('weeklyGoalsList');
+        goalsList.innerHTML = goals.map(goal => `
+            <div class="goal-item">
+                <div class="goal-header">
+                    <span class="goal-category">${goal.category}</span>
+                    <span class="goal-progress">${goal.progress}%</span>
+                </div>
+                <div class="goal-target">${goal.target}</div>
+                <div class="goal-status">
+                    <span class="goal-current">${goal.current}</span>
+                    <span class="goal-arrow">→</span>
+                    <span class="goal-goal">${goal.goal}</span>
+                </div>
+                <div class="goal-bar">
+                    <div class="goal-fill" style="width: ${goal.progress}%"></div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Utilitaires pour les semaines
+    getCurrentWeekRange() {
+        const today = new Date();
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - today.getDay() + 1);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        
+        return `${monday.toLocaleDateString('fr-FR')} - ${sunday.toLocaleDateString('fr-FR')}`;
+    }
+
+    getCurrentWeekNumber() {
+        const startDate = new Date('2025-06-26');
+        const today = new Date();
+        const diffTime = Math.abs(today - startDate);
+        const diffWeeks = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
+        return Math.min(diffWeeks, 13);
+    }
+
+    getCurrentWeekKey() {
+        const today = new Date();
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - today.getDay() + 1);
+        return monday.toISOString().split('T')[0];
+    }
+
+    changeWeek(direction) {
+        // Logique pour changer de semaine
+        console.log('Changement de semaine:', direction);
+        // À implémenter selon tes besoins
+    }
+
+    async generateWeeklyPlan() {
+        await this.loadWeeklyData();
+        this.showAIFeedback("🎯 Nouveau planning généré soldat ! Prêt pour la bataille ! ⚔️");
+    }
+
+    async saveWeeklyPlan() {
+        // Sauvegarder le planning hebdomadaire
+        const weeklyData = {
+            week: this.getCurrentWeekKey(),
+            objectives: JSON.parse(localStorage.getItem('weekly-objectives') || '{}'),
+            timestamp: new Date().toISOString()
+        };
+        
+        try {
+            await this.githubAPI.saveData(weeklyData);
+            this.showAIFeedback("💾 Planning sauvegardé ! Mission en cours ! 🔥");
+        } catch (error) {
+            console.error('Erreur sauvegarde planning:', error);
+        }
+    }
+
+    toggleSportDay(day) {
+        // Toggle du jour sportif
+        console.log('Toggle sport day:', day);
+        // À implémenter selon tes besoins
     }
 
     async generateDailyObjectives() {
@@ -465,6 +801,17 @@ Contexte: C'est le jour ${this.getMissionDay()}/90 de sa mission.`;
             this.saveToLocalCache(question.id, value);
             this.showNetworkStatus('saving');
             
+            // ✅ NOUVEAU: Sauvegarder automatiquement dans la mémoire persistante
+            const context = {
+                checkType: this.currentCheck,
+                missionDay: this.getMissionDay(),
+                questionIndex: this.currentQuestionIndex
+            };
+            
+            if (this.chatGPT && this.chatGPT.memory) {
+                await this.chatGPT.memory.autoSavePreferences(question.label, value, context);
+            }
+            
             // ✅ OPTIMISATION 2: Passer à la question suivante SANS attendre
             setTimeout(() => {
                 this.currentQuestionIndex++;
@@ -472,7 +819,7 @@ Contexte: C'est le jour ${this.getMissionDay()}/90 de sa mission.`;
             }, 500); // Réaction immédiate
             
             // ✅ OPTIMISATION 3: Sauvegarde et feedback en arrière-plan
-            this.processAnswerInBackground(question.id, value, question.label);
+            this.processAnswerInBackground(question.id, value, question.label, context);
             
         } catch (error) {
             console.error('Erreur submit:', error);
@@ -504,12 +851,12 @@ Contexte: C'est le jour ${this.getMissionDay()}/90 de sa mission.`;
     }
 
     // ✅ NOUVELLE MÉTHODE: Traitement en arrière-plan
-    async processAnswerInBackground(questionId, value, questionLabel) {
+    async processAnswerInBackground(questionId, value, questionLabel, context) {
         try {
             // Lancer les deux opérations EN PARALLÈLE
             const [saveResult, feedbackResult] = await Promise.allSettled([
                 this.saveAnswer(questionId, value),
-                this.getAIFeedback(questionLabel, value)
+                this.getAIFeedback(questionLabel, value, context)
             ]);
             
             // Afficher le feedback seulement s'il arrive
@@ -619,16 +966,14 @@ Contexte: C'est le jour ${this.getMissionDay()}/90 de sa mission.`;
         }
     }
 
-    async getAIFeedback(question, answer) {
-        const prompt = `Tu es un coach militaire strict mais bienveillant. Réponds en français, tutoie, utilise un vocabulaire militaire, donne des ordres clairs, maximum 50 mots, utilise des emojis militaires (⚔️, 🎯, 💪, 🔥).
+    async getAIFeedback(question, answer, context = {}) {
+        const prompt = `Question: ${question}
+Réponse d'Arnaud: ${answer}
 
-Question: ${question}
-Réponse: ${answer}
-
-Donne un feedback direct et actionnable pour Arnaud, 18 ans, en mission de transformation de 90 jours.`;
+Donne un feedback de coach militaire direct et actionnable.`;
         
         try {
-            const feedback = await this.chatGPT.getFeedback(prompt);
+            const feedback = await this.chatGPT.getFeedback(prompt, context);
             return feedback;
         } catch (error) {
             console.error('❌ Erreur IA:', error);
@@ -1022,30 +1367,4 @@ Donne un feedback direct et actionnable pour Arnaud, 18 ans, en mission de trans
             muscu: [
                 { id: 'muscu_done', label: 'Musculation effectuée ?', type: 'select', options: ['Oui', 'Non'], required: true },
                 { id: 'muscu_duration', label: 'Durée/qualité (si oui)', type: 'textarea', required: false },
-                { id: 'challenge_action', label: 'Action de dépassement réalisée', type: 'textarea', required: true }
-            ],
-            bilan: [
-                { id: 'nutrition_respected', label: 'Nutrition respectée ?', type: 'select', options: ['Parfaitement', 'Globalement', 'Partiellement', 'Pas du tout'], required: true },
-                { id: 'dominant_emotion', label: 'Émotion dominante de la journée', type: 'text', required: true },
-                { id: 'day_rating', label: 'Note de la journée (1-10)', type: 'select', options: Array.from({length: 10}, (_, i) => i + 1), required: true },
-                { id: 'rating_justification', label: 'Justification de ta note', type: 'textarea', required: true },
-                { id: 'business_action', label: 'Action business/développement personnel', type: 'textarea', required: true }
-            ]
-        };
-    }
-}
-
-// Initialisation globale optimisée
-let app;
-
-// S'assurer que l'app est disponible globalement
-window.addEventListener('DOMContentLoaded', () => {
-    app = new CockpitCombat();
-    window.app = app; // Rendre accessible globalement
-});
-
-// Fallback si DOMContentLoaded a déjà été déclenché
-if (document.readyState !== 'loading') {
-    app = new CockpitCombat();
-    window.app = app;
-}
+                { id: 'challenge
