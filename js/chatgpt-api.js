@@ -1,22 +1,29 @@
-// js/chatgpt-api.js - OPTIMISÉ
-// Dans ton ChatGPTAPI, remplacer par :
 class ChatGPTAPI {
     constructor() {
+        this.apiKey = localStorage.getItem('openai_key') || null;
         this.memory = new PersistentMemory();
-        this.assistantId = 'ton_assistant_avec_memoire';
+        this.feedbackCache = new Map();
     }
 
-    async getFeedback(prompt) {
-        // L'assistant accède automatiquement à TOUTE sa mémoire
-        return await this.memory.getContextualResponse(prompt);
-    }
-}
-
+    async getFeedback(prompt, context = {}) {
         try {
-            // ✅ Timeout de 5 secondes max
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            // Utiliser la mémoire persistante pour une réponse contextuelle
+            const response = await this.memory.getContextualResponse(prompt, context);
+            return response;
             
+        } catch (error) {
+            console.error('Erreur mémoire persistante:', error);
+            // Fallback vers l'API classique
+            return await this.getFallbackFeedback(prompt);
+        }
+    }
+
+    async getFallbackFeedback(prompt) {
+        // Timeout de 5 secondes max
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        try {
             const response = await fetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -24,7 +31,7 @@ class ChatGPTAPI {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model: 'gpt-3.5-turbo', // ✅ Plus rapide que GPT-4
+                    model: 'gpt-3.5-turbo',
                     messages: [
                         {
                             role: 'system',
@@ -35,7 +42,7 @@ class ChatGPTAPI {
                             content: prompt
                         }
                     ],
-                    max_tokens: 80, // ✅ Limité pour plus de rapidité
+                    max_tokens: 80,
                     temperature: 0.7
                 }),
                 signal: controller.signal
@@ -46,22 +53,12 @@ class ChatGPTAPI {
             if (!response.ok) throw new Error(`API Error: ${response.status}`);
             
             const data = await response.json();
-            const feedback = data.choices[0].message.content.trim();
-            
-            // ✅ Mettre en cache
-            this.feedbackCache.set(promptHash, feedback);
-            
-            return feedback;
+            return data.choices[0].message.content.trim();
             
         } catch (error) {
-            console.error('Erreur ChatGPT:', error);
+            console.error('Erreur ChatGPT fallback:', error);
             return this.getDefaultFeedback();
         }
-    }
-
-    hashPrompt(prompt) {
-        // Simple hash pour cache
-        return prompt.substring(0, 50).replace(/\s+/g, '');
     }
 
     getDefaultFeedback() {
