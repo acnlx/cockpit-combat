@@ -18,12 +18,14 @@ class CockpitCombat {
                 this.initializeTheme();
                 this.updateMissionProgress();
                 this.showHomePage();
+                this.startBackgroundSync();
             });
         } else {
             this.setupEventListeners();
             this.initializeTheme();
             this.updateMissionProgress();
             this.showHomePage();
+            this.startBackgroundSync();
         }
     }
 
@@ -432,12 +434,10 @@ Contexte: C'est le jour ${this.getMissionDay()}/90 de sa mission.`;
         }
     }
 
+    // ✅ MÉTHODE SUBMITANSWER OPTIMISÉE
     async submitAnswer() {
         const input = document.getElementById('questionInput');
-        if (!input) {
-            console.error('Input non trouvé');
-            return;
-        }
+        if (!input) return;
 
         const value = input.value.trim();
         const question = this.questions[this.currentCheck][this.currentQuestionIndex];
@@ -447,29 +447,32 @@ Contexte: C'est le jour ${this.getMissionDay()}/90 de sa mission.`;
             return;
         }
 
-        // Désactiver le bouton pendant le traitement
+        // Désactiver le bouton avec animation
         const submitBtn = document.querySelector('.submit-btn');
         if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<div class="loading"></div> ENVOI...';
         }
 
+        // Marquer visuellement comme complété IMMÉDIATEMENT
+        const questionBlock = document.getElementById('currentQuestion');
+        if (questionBlock) {
+            questionBlock.classList.add('completed');
+        }
+
         try {
-            // Marquer visuellement comme complété
-            const questionBlock = document.getElementById('currentQuestion');
-            if (questionBlock) {
-                questionBlock.classList.add('completed');
-            }
+            // ✅ OPTIMISATION 1: Sauvegarde locale immédiate
+            this.saveToLocalCache(question.id, value);
+            this.showNetworkStatus('saving');
             
-            // Sauvegarder et obtenir feedback
-            await this.saveAnswer(question.id, value);
-            await this.getAIFeedback(question.label, value);
-            
-            // Passer à la question suivante
+            // ✅ OPTIMISATION 2: Passer à la question suivante SANS attendre
             setTimeout(() => {
                 this.currentQuestionIndex++;
                 this.renderCurrentQuestion();
-            }, 2000);
+            }, 500); // Réaction immédiate
+            
+            // ✅ OPTIMISATION 3: Sauvegarde et feedback en arrière-plan
+            this.processAnswerInBackground(question.id, value, question.label);
             
         } catch (error) {
             console.error('Erreur submit:', error);
@@ -478,6 +481,123 @@ Contexte: C'est le jour ${this.getMissionDay()}/90 de sa mission.`;
                 submitBtn.innerHTML = 'ENVOYER ⚔️';
             }
         }
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Cache local
+    saveToLocalCache(questionId, value) {
+        const today = new Date().toISOString().split('T')[0];
+        const cacheKey = `cockpit-cache-${today}`;
+        
+        let cache = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+        
+        cache.push({
+            date: today,
+            check_type: this.currentCheck,
+            question_id: questionId,
+            answer: value,
+            timestamp: new Date().toISOString(),
+            synced: false
+        });
+        
+        localStorage.setItem(cacheKey, JSON.stringify(cache));
+        console.log('💾 Sauvé en cache local');
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Traitement en arrière-plan
+    async processAnswerInBackground(questionId, value, questionLabel) {
+        try {
+            // Lancer les deux opérations EN PARALLÈLE
+            const [saveResult, feedbackResult] = await Promise.allSettled([
+                this.saveAnswer(questionId, value),
+                this.getAIFeedback(questionLabel, value)
+            ]);
+            
+            // Afficher le feedback seulement s'il arrive
+            if (feedbackResult.status === 'fulfilled') {
+                this.showAIFeedback(feedbackResult.value);
+            }
+            
+            this.showNetworkStatus('synced');
+            console.log('✅ Traitement arrière-plan terminé');
+            
+        } catch (error) {
+            console.error('❌ Erreur arrière-plan:', error);
+            this.showNetworkStatus('offline');
+        }
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Sync batch
+    startBackgroundSync() {
+        setInterval(() => {
+            this.syncLocalCache();
+        }, 30000); // 30 secondes
+    }
+
+    async syncLocalCache() {
+        const today = new Date().toISOString().split('T')[0];
+        const cacheKey = `cockpit-cache-${today}`;
+        let cache = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+        
+        const unsyncedItems = cache.filter(item => !item.synced);
+        
+        if (unsyncedItems.length === 0) return;
+        
+        console.log(`🔄 Sync de ${unsyncedItems.length} éléments...`);
+        this.showNetworkStatus('syncing');
+        
+        try {
+            // Envoyer tous les éléments non synchronisés
+            for (const item of unsyncedItems) {
+                await this.githubAPI.saveData(item);
+                item.synced = true;
+            }
+            
+            localStorage.setItem(cacheKey, JSON.stringify(cache));
+            this.showNetworkStatus('synced');
+            console.log('✅ Synchronisation terminée');
+            
+        } catch (error) {
+            console.error('❌ Erreur sync:', error);
+            this.showNetworkStatus('offline');
+        }
+    }
+
+    // ✅ NOUVELLE MÉTHODE: Indicateur de statut réseau
+    showNetworkStatus(status) {
+        const statusDiv = document.getElementById('networkStatus') || this.createNetworkStatus();
+        
+        switch(status) {
+            case 'saving':
+                statusDiv.innerHTML = '💾 Sauvegarde...';
+                statusDiv.className = 'network-status saving';
+                statusDiv.style.display = 'block';
+                break;
+            case 'syncing':
+                statusDiv.innerHTML = '🔄 Synchronisation...';
+                statusDiv.className = 'network-status syncing';
+                statusDiv.style.display = 'block';
+                break;
+            case 'synced':
+                statusDiv.innerHTML = '✅ Synchronisé';
+                statusDiv.className = 'network-status synced';
+                statusDiv.style.display = 'block';
+                setTimeout(() => statusDiv.style.display = 'none', 2000);
+                break;
+            case 'offline':
+                statusDiv.innerHTML = '📱 Mode hors ligne';
+                statusDiv.className = 'network-status offline';
+                statusDiv.style.display = 'block';
+                break;
+        }
+    }
+
+    createNetworkStatus() {
+        const statusDiv = document.createElement('div');
+        statusDiv.id = 'networkStatus';
+        statusDiv.className = 'network-status';
+        statusDiv.style.display = 'none';
+        document.body.appendChild(statusDiv);
+        return statusDiv;
     }
 
     async saveAnswer(questionId, value) {
@@ -495,11 +615,12 @@ Contexte: C'est le jour ${this.getMissionDay()}/90 de sa mission.`;
             console.log('✅ Données sauvegardées:', data);
         } catch (error) {
             console.error('❌ Erreur sauvegarde:', error);
+            throw error;
         }
     }
 
     async getAIFeedback(question, answer) {
-        const prompt = `Tu es un coach militaire strict mais bienveillant. Réponds en français, tutoie, utilise un vocabulaire militaire, donne des ordres clairs, maximum 80-100 mots, utilise des emojis militaires (⚔️, 🎯, 💪, 🔥).
+        const prompt = `Tu es un coach militaire strict mais bienveillant. Réponds en français, tutoie, utilise un vocabulaire militaire, donne des ordres clairs, maximum 50 mots, utilise des emojis militaires (⚔️, 🎯, 💪, 🔥).
 
 Question: ${question}
 Réponse: ${answer}
@@ -508,10 +629,10 @@ Donne un feedback direct et actionnable pour Arnaud, 18 ans, en mission de trans
         
         try {
             const feedback = await this.chatGPT.getFeedback(prompt);
-            this.showAIFeedback(feedback);
+            return feedback;
         } catch (error) {
             console.error('❌ Erreur IA:', error);
-            this.showAIFeedback("⚔️ Bien reçu soldat ! Continue sur ta lancée ! 🔥");
+            return "⚔️ Bien reçu soldat ! Continue sur ta lancée ! 🔥";
         }
     }
 
@@ -914,7 +1035,7 @@ Donne un feedback direct et actionnable pour Arnaud, 18 ans, en mission de trans
     }
 }
 
-// Initialisation globale
+// Initialisation globale optimisée
 let app;
 
 // S'assurer que l'app est disponible globalement
