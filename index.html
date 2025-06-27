@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cockpit de Combat - Mission 90 Jours</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header Ultra-Moderne -->
+        <header class="mission-header">
+            <div class="mission-info">
+                <h1>COCKPIT DE COMBAT</h1>
+                <div class="soldier-info">
+                    <span><i class="fas fa-user-shield"></i> SOLDAT: ARNAUD</span>
+                    <span class="mission-day"><i class="fas fa-calendar-day"></i> JOUR: <span id="missionDay">1</span>/90</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="missionProgress"></div>
+                </div>
+            </div>
+            <button class="theme-toggle" id="themeToggle">
+                <i class="fas fa-moon"></i>
+            </button>
+        </header>
+
+        <!-- Zone principale dynamique -->
+        <main class="main-content">
+            <div class="check-container" id="checkContainer">
+                <!-- Contenu dynamique selon l'heure -->
+            </div>
+        </main>
+
+        <!-- Navigation rapide moderne -->
+        <!-- Navigation rapide moderne -->
+<nav class="quick-nav">
+    <button class="nav-btn" data-check="home">
+        <span><i class="fas fa-home"></i> Accueil</span>
+    </button>
+    <button class="nav-btn" data-check="mental">
+        <span><i class="fas fa-brain"></i> Mental</span>
+    </button>
+    <button class="nav-btn" data-check="cardio">
+        <span><i class="fas fa-heartbeat"></i> Cardio</span>
+    </button>
+    <button class="nav-btn" data-check="muscu">
+        <span><i class="fas fa-dumbbell"></i> Muscu</span>
+    </button>
+    <button class="nav-btn" data-check="bilan">
+        <span><i class="fas fa-chart-line"></i> Bilan</span>
+    </button>
+    <button class="nav-btn" data-check="stats">
+        <span><i class="fas fa-analytics"></i> Stats</span>
+    </button>
+</nav>
+
+
+        <!-- Zone de feedback IA -->
+        <div class="ai-feedback" id="aiFeedback">
+            <div class="feedback-content">
+                <h3><i class="fas fa-robot"></i> ORDRE DU COACH IA</h3>
+                <div class="feedback-text" id="feedbackText"></div>
+            </div>
+        </div>
+
+        <!-- Modal pour consultation des données -->
+        <div class="modal" id="dataModal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2><i class="fas fa-database"></i> Consultation des Données</h2>
+                <input type="date" id="dateSelector" class="form-input">
+                <div id="dataDisplay"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/github-api.js"></script>
+    <script src="js/chatgpt-api.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
