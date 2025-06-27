@@ -1,17 +1,16 @@
 // js/chatgpt-api.js - OPTIMISÉ
+// Dans ton ChatGPTAPI, remplacer par :
 class ChatGPTAPI {
     constructor() {
-        this.apiKey = localStorage.getItem('openai_key') || null;
-        this.feedbackCache = new Map();
+        this.memory = new PersistentMemory();
+        this.assistantId = 'ton_assistant_avec_memoire';
     }
 
     async getFeedback(prompt) {
-        // ✅ Cache des réponses similaires
-        const promptHash = this.hashPrompt(prompt);
-        if (this.feedbackCache.has(promptHash)) {
-            console.log('💨 Feedback depuis cache');
-            return this.feedbackCache.get(promptHash);
-        }
+        // L'assistant accède automatiquement à TOUTE sa mémoire
+        return await this.memory.getContextualResponse(prompt);
+    }
+}
 
         try {
             // ✅ Timeout de 5 secondes max
